@@ -5,12 +5,15 @@ User = get_user_model()
 
 
 class Conversation(models.Model):
-    initiator = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    reciever = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    initiator = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='conv_starter')
+    receiver = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='conv_participant')
     last_msg = models.ForeignKey(
-        'Message', on_delete=models.SET_NULL, null=True)
+        'Message', on_delete=models.SET_NULL, null=True,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.initiator.username
 
 
 class Message(models.Model):
@@ -20,3 +23,10 @@ class Message(models.Model):
     is_read = models.BooleanField(default=False)
     archived = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp',]
+
+
+    def __str__(self):
+        return self.text

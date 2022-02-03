@@ -42,7 +42,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'channels',
     # local app
-    'user'
+    'user',
+    'chatapi',
 ]
 
 MIDDLEWARE = [
