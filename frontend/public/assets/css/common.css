@@ -2126,9 +2126,9 @@ ul {
 
 /* Track */
 
-/* ::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
     background: transparent;
-} */
+}
 
 
 /* Handle */
