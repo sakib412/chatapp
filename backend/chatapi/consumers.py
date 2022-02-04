@@ -31,7 +31,7 @@ class ChatConsumer(WebsocketConsumer):
             }))
             self.close()
 
-        print(self.user)
+        print(self.user, self.reciverUser)
         if self.user.username == self.room_name:
             self.accept()
             self.send(text_data=json.dumps({
@@ -51,6 +51,9 @@ class ChatConsumer(WebsocketConsumer):
             Q(initiator=self.user, receiver=self.reciverUser) |
             Q(initiator=self.reciverUser, receiver=self.user)
         ).first()
+
+        if self.conversation is None:
+            self.conversation = Conversation.objects.create(initiator=self.user, receiver=self.reciverUser)
         print(self.conversation)
         messages = Message.objects.filter(conv_id=self.conversation)[:100]
 
@@ -70,6 +73,7 @@ class ChatConsumer(WebsocketConsumer):
     def receive(self, text_data):
         text_data_json = json.loads(text_data)
         text = text_data_json['message']
+        print(text)
 
         message = Message.objects.create(sender=self.user,text=text,conv_id=self.conversation)
         msgData = MessageSerializer(instance=message).data

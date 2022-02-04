@@ -33,7 +33,7 @@ class UserViewSet(
         user.last_name = last_name
         user.save()
         serializer_data = UserSerializer(user).data
-        return Response({"message": serializer_data})
+        return Response(serializer_data)
 
 
 
@@ -51,10 +51,10 @@ class LoginView(views.APIView):
         username = request.data.get("username", None)
         password = request.data.get("password", None)
         if username is None or password is None:
-            return Response({"message": "Please input username and password"})
+            return Response({"message": "Please input username and password"}, status=status.HTTP_400_BAD_REQUEST)
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
         else:
-            return Response({"message": "wrong credentials"})
-        return Response({"message":"success"})
+            return Response({"message": "wrong credentials"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message":"Login success"})
