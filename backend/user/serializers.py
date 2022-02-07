@@ -27,13 +27,22 @@ class UserSerializer(serializers.ModelSerializer):
 
             if conversation:
 
-                conv_serializer_data = ConversationSerializer(instance=conversation).data
-                message_unread_count = Message.objects.filter(conv_id=conversation,is_read=False).exclude(sender=user).count()
-                conv_serializer_data.update({"unread":message_unread_count})
+                conv_serializer_data = ConversationSerializer(
+                    instance=conversation).data
+
+                all_unread = Message.objects.filter(
+                    conv_id=conversation, is_read=False)
+                all_unread_count = all_unread.count()
+                initiator_unread = all_unread.filter(
+                    sender=conversation.initiator).count()
+                receiver_unread = all_unread_count - initiator_unread
+
+                conv_serializer_data.update({"unread": {
+                    'initiator': {'id': conversation.initiator.id, 'count': initiator_unread},
+                    'receiver': {'id': conversation.receiver.id, 'count': receiver_unread}
+                }})
             else:
                 conv_serializer_data = None
-
-            
 
             data.update({"conversation": conv_serializer_data})
 

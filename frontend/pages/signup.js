@@ -15,7 +15,6 @@ function Registration(props) {
     }
 
     const onSubmit = (data) => {
-        console.log(data);
         axiosInstance.post("/user/", { username: data.username, password: data.password })
             .then((response) => {
                 toast.success("Registration Successful, you can login now");
@@ -169,5 +168,5 @@ export async function getServerSideProps({ req }) {
 
     }
 
-    return { props: { user: data.user } }
+    return { props: { user: data } }
 }

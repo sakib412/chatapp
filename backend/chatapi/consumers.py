@@ -3,8 +3,10 @@ from asgiref.sync import async_to_sync
 from django.db.models import Q
 from django.contrib.auth import get_user_model
 from channels.generic.websocket import WebsocketConsumer
+from channels.layers import get_channel_layer
+
 from chatapi.models import Conversation, Message
-from .serializers import MessageSerializer
+from .serializers import MessageSerializer, ConversationSerializer
 from user.serializers import UserSerializer
 
 User = get_user_model()
@@ -60,7 +62,6 @@ class ChatConsumer(WebsocketConsumer):
             }))
             self.close()
 
-        print(self.user, self.reciverUser)
 
         # Join room group
         async_to_sync(self.channel_layer.group_add)(
@@ -82,6 +83,35 @@ class ChatConsumer(WebsocketConsumer):
         self.send(text_data=json.dumps(
             {"results": msgSerializerData, "type": "all"}))
 
+
+
+        # Send to global chat
+        conv_serializer_global = ConversationSerializer(
+            instance=self.conversation).data
+        all_unread = Message.objects.filter(
+            conv_id=self.conversation, is_read=False)
+        all_unread_count = all_unread.count()
+        initiator_unread = all_unread.filter(sender=self.conversation.initiator).count()
+        receiver_unread = all_unread_count - initiator_unread
+
+
+        conv_serializer_global.update({"unread": {
+            'initiator': {'id':self.conversation.initiator.id, 'count': initiator_unread},
+            'receiver': {'id':self.conversation.receiver.id, 'count': receiver_unread}
+        }})
+
+        channel_layer = get_channel_layer()
+
+        async_to_sync(channel_layer.group_send)(
+            'global_chat',
+            {
+                "type": 'chat_message',
+                'message': conv_serializer_global,
+                'msg_type': 'update',
+                'sender_channel_name': self.channel_name
+            }
+        )
+
     def disconnect(self, close_code):
         # Leave room group
         async_to_sync(self.channel_layer.group_discard)(
@@ -95,7 +125,6 @@ class ChatConsumer(WebsocketConsumer):
         msg_type = text_data_json['type']
         if msg_type == 'new':
             text = text_data_json['message']
-
             message = Message.objects.create(
                 sender=self.user, text=text, conv_id=self.conversation)
             self.conversation.last_msg = message
@@ -104,7 +133,21 @@ class ChatConsumer(WebsocketConsumer):
             message = Message.objects.filter(
                 id=int(text_data_json['messageID'])).first()
             message.archived = True
+            if self.conversation.last_msg == message:
+                self.conversation.last_msg = message
+                self.conversation.save()
             message.save()
+
+        if msg_type == 'read':
+            message = Message.objects.filter(
+                id=int(text_data_json['messageID'])
+            ).first()
+            if message.conv_id.id == text_data_json['conv_id']:
+                message.is_read = True
+                self.conversation.last_msg = message
+                message.save()
+                
+
         msgData = MessageSerializer(instance=message).data
 
         # Send message to room group
@@ -117,16 +160,43 @@ class ChatConsumer(WebsocketConsumer):
             }
         )
 
+        # Send to global chat
+        conv_serializer_global = ConversationSerializer(
+            instance=self.conversation).data
+        all_unread = Message.objects.filter(
+            conv_id=self.conversation, is_read=False)
+        all_unread_count = all_unread.count()
+        initiator_unread = all_unread.filter(sender=self.conversation.initiator).count()
+        receiver_unread = all_unread_count - initiator_unread
+
+
+        conv_serializer_global.update({"unread": {
+            'initiator': {'id':self.conversation.initiator.id, 'count': initiator_unread},
+            'receiver': {'id':self.conversation.receiver.id, 'count': receiver_unread}
+        }})
+
+        channel_layer = get_channel_layer()
+
+        async_to_sync(channel_layer.group_send)(
+            'global_chat',
+            {
+                "type": 'chat_message',
+                'message': conv_serializer_global,
+                'msg_type': 'update',
+                'sender_channel_name': self.channel_name
+            }
+        )
+
     # Receive message from room group
     def chat_message(self, event):
         message = event['message']
         msg_type = event['msg_type']
         if msg_type == 'new':
             t = 'individual'
-        if msg_type == 'delete':
+        else:
             t = msg_type
 
-
+        
         # Send message to WebSocket
         self.send(text_data=json.dumps({
             'results': message,
@@ -134,10 +204,12 @@ class ChatConsumer(WebsocketConsumer):
         }))
 
 
-
 class ConversationConsumer(WebsocketConsumer):
     def connect(self):
+        self.online_users = {}
+
         self.user = self.scope["user"]
+
         # Check user is authenticated
         if self.user.is_anonymous:
             self.accept()
@@ -155,6 +227,12 @@ class ConversationConsumer(WebsocketConsumer):
         )
 
         self.accept()
+        #
+        if str(self.user.id) in self.online_users:
+            self.online_users[str(self.user.id)] += 1
+        else:
+            self.online_users[str(self.user.id)] = 1
+
         all_users = User.objects.exclude(id=self.user.id)
         user_serialized_data = UserSerializer(
             instance=all_users, many=True, context={"user": self.user}).data
@@ -173,24 +251,34 @@ class ConversationConsumer(WebsocketConsumer):
             self.channel_name
         )
 
+        if str(self.user.id) in self.online_users:
+            self.online_users[str(self.user.id)] -= 1
+        else:
+            self.online_users[str(self.user.id)] = 0
+
     def receive(self, text_data):
         text_data_json = json.loads(text_data)
         text = text_data_json['message']
+        msg_type = text_data_json['type']
+
         # Send message to room group
         async_to_sync(self.channel_layer.group_send)(
             self.room_group_name,
             {
                 'type': 'chat_message',
-                'message': text
+                'message': text,
+                "msg_type": msg_type,
             }
         )
 
     # Receive message from room group
     def chat_message(self, event):
         message = event['message']
+        msg_type = event['msg_type']
+
 
         # Send message to WebSocket
         self.send(text_data=json.dumps({
-            'results': message,
-            "type": "individual"
+            'result': message,
+            "type": msg_type
         }))
