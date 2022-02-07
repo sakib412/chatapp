@@ -13,7 +13,7 @@ class Conversation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.initiator.username
+        return str(self.id)
 
 
 class Message(models.Model):

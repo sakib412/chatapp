@@ -1,4 +1,4 @@
-from django.contrib.auth import get_user_model,authenticate, login
+from django.contrib.auth import get_user_model, authenticate, login
 from django.db import IntegrityError
 from rest_framework import viewsets, mixins, views, permissions, status
 from rest_framework.viewsets import GenericViewSet
@@ -19,6 +19,7 @@ class UserViewSet(
     permission_classes = [IsOwnerOrReadOnly, ]
     queryset = User.objects.all()
     serializer_class = UserSerializer
+
     def create(self, request):
         username = request.data.get("username", None)
         email = request.data.get("email", "")
@@ -36,18 +37,19 @@ class UserViewSet(
         return Response(serializer_data)
 
 
-
 class UserView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated,]
+    permission_classes = [permissions.IsAuthenticated, ]
+
     def get(self, request, *args, **kwargs):
         user = request.user
         serializer_data = UserSerializer(user).data
-        return Response({"user":serializer_data})
+        return Response({"user": serializer_data})
 
 
 class LoginView(views.APIView):
-    permission_classes = [permissions.AllowAny,]
-    def post(self,request, *args, **kwargs):
+    permission_classes = [permissions.AllowAny, ]
+
+    def post(self, request, *args, **kwargs):
         username = request.data.get("username", None)
         password = request.data.get("password", None)
         if username is None or password is None:
@@ -57,4 +59,4 @@ class LoginView(views.APIView):
             login(request, user)
         else:
             return Response({"message": "wrong credentials"}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"message":"Login success"})
+        return Response({"message": "Login success"})
